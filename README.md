@@ -3,6 +3,9 @@
 Skincare App Project
 
 ## Getting Started
+Nama : Rayhan Aurelia Pramana Rijal
+NRP : 5025231237
+Link Demo : https://youtu.be/qqF1ZJrtvmA
 
 This project is a starting point for a Flutter application.
 
