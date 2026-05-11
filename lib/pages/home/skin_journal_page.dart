@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../../services/skin_ai_service.dart';
+import 'skin_analysis_result_page.dart';
 
 class SkinJournalPage extends StatefulWidget {
   const SkinJournalPage({super.key});
@@ -93,17 +95,50 @@ class _SkinJournalPageState extends State<SkinJournalPage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: EdgeInsets.zero,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(15),
-              child: Image.file(File(data['imageUrl']), fit: BoxFit.cover),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              child: Image.file(File(data['imageUrl']), fit: BoxFit.cover, width: double.infinity, height: 220),
             ),
-            const SizedBox(height: 16),
-            Text(DateFormat('EEEE, dd MMMM yyyy').format((data['timestamp'] as Timestamp).toDate()), style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(data['note'] ?? 'No log entry.', textAlign: TextAlign.center),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              child: Column(
+                children: [
+                  Text(
+                    DateFormat('EEEE, dd MMMM yyyy').format((data['timestamp'] as Timestamp).toDate()),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    data['note'] ?? 'No log entry.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _analyzeWithAI(File(data['imageUrl']));
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: const Text('Analisis AI'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3F51B5),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -111,13 +146,54 @@ class _SkinJournalPageState extends State<SkinJournalPage> {
             icon: const Icon(Icons.delete, color: Colors.red),
             onPressed: () async {
               await FirebaseFirestore.instance.collection('journal_entries').doc(data['id']).delete();
-              Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
           ),
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
         ],
       ),
     );
+  }
+
+  Future<void> _analyzeWithAI(File imageFile) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF3F51B5)),
+            SizedBox(width: 20),
+            Expanded(child: Text('Menganalisis kulit...\nMohon tunggu sebentar.')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final result = await SkinAIService().analyze(imageFile);
+      if (!mounted) return;
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SkinAnalysisResultPage(result: result, imageFile: imageFile),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().contains('Unable to create interpreter')
+              ? 'Model AI belum tersedia. Jalankan Colab notebook terlebih dahulu dan copy skin_classifier.tflite ke assets/models/'
+              : 'Analisis gagal: $e'),
+          duration: const Duration(seconds: 5),
+          backgroundColor: Colors.red[700],
+        ),
+      );
+    }
   }
 
   Future<void> _addNewEntry() async {
